@@ -18,9 +18,13 @@ RabbitMQ MCP 服务端面临两类典型的下游使用场景：
    - 生产级安全防护：启用内置 DNS 重绑定防护（DNS Rebinding Protection），校验合法主机头，防止恶意浏览器网页非法穿透本地私有网络。
 
 2. **参数优先级三层覆盖准则 (Configuration Precedence)**：
-   - **第一优先级（最高）**：CLI 显式命令行参数（如 `--url`, `--management-url`, `--allow-write`, `--transport`）；
-   - **第二优先级（中等）**：系统环境变量（如 `MCP_RABBITMQ_URL`, `MCP_RABBITMQ_ALLOW_WRITE`）；
+   - **第一优先级（最高）**：CLI 显式命令行参数（如 `--url`, `--broker-host`, `--broker-port`, `-u`, `-P`, `--vhost`, `--ssl`, `--management-port`, `--allow-write`, `--transport`）；
+   - **第二优先级（中等）**：系统环境变量（如 `MCP_RABBITMQ_HOST`, `MCP_RABBITMQ_PORT`, `MCP_RABBITMQ_USERNAME`, `MCP_RABBITMQ_PASSWORD`, `MCP_RABBITMQ_URL`）；
    - **第三优先级（基线）**：静态配置文件（`connections.yaml` 或 `-c/--config` 指定路径）。
+
+3. **分立参数命名空间防冲突与深度融合机制 (Split Parameters & Deep Merging)**：
+   - **命名空间隔离**：网关自身监听地址与端口严格限定为 `--host` 与 `-p, --port`；目标 RabbitMQ Broker 连接参数采用专用命名空间 `--broker-host`（别名 `--rmq-host`）、`--broker-port`（别名 `--rmq-port`）、`-u/--username`、`-P/--password`、`--vhost`、`--ssl`，绝不混淆；
+   - **深度融合覆盖**：支持整体连接串与分立参数并存。当同时传入基础 URL 与分立参数（例如通过环境变量注入 `MCP_RABBITMQ_URL` 但在 CLI 传入 `-P custom_pwd`）时，服务端自动解析并以分立参数对 URL 内对应字段执行精确替换，保持其余拓扑信息不变。
 
 ## 方案权衡 (Considered Options)
 

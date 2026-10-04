@@ -38,18 +38,28 @@
 无需手动创建 Python 虚拟环境，借助现代包管理工具 `uv` 即可直接拉取并运行最新版：
 
 ```bash
-# 只读探查模式（默认连接本地 RabbitMQ）
-uvx atengk-mcp-server-rabbitmq --url "amqp://guest:guest@localhost:5672/"
+# 1. 只读探查模式（默认连接本地 localhost:5672）
+uvx atengk-mcp-server-rabbitmq
 
-# 启用 Management HTTP API 并开启写门禁（允许声明拓扑、清空队列及发送消息）
+# 2. 通过分立参数连接远程 Broker 与 Management API 并解除写保护
+uvx atengk-mcp-server-rabbitmq \
+  --broker-host "rabbitmq.prod.internal" \
+  --broker-port 5672 \
+  -u "admin" -P "secret_pass" \
+  --vhost "prod_vhost" \
+  --management-port 15672 \
+  --allow-write
+
+# 3. 通过完整 URL 连接
 uvx atengk-mcp-server-rabbitmq \
   --url "amqp://guest:guest@localhost:5672/" \
   --management-url "http://guest:guest@localhost:15672" \
   --allow-write
 
-# 启动常驻 HTTP SSE 服务（监听 0.0.0.0:8000）
+# 4. 启动常驻 HTTP SSE 服务（网关监听 0.0.0.0:8000）
 uvx atengk-mcp-server-rabbitmq \
-  --url "amqp://guest:guest@localhost:5672/" \
+  --broker-host "rabbitmq.prod.internal" \
+  -u "admin" -P "secret_pass" \
   --transport sse --host 0.0.0.0 --port 8000
 ```
 
@@ -58,8 +68,8 @@ uvx atengk-mcp-server-rabbitmq \
 ```bash
 pip install atengk-mcp-server-rabbitmq
 
-# 启动服务
-atengk-mcp-server-rabbitmq --url "amqp://guest:guest@localhost:5672/" --allow-write
+# 启动服务（支持完整 URL 或分立参数）
+atengk-mcp-server-rabbitmq --broker-host "127.0.0.1" -u "guest" -P "guest" --allow-write
 ```
 
 ### 方式 3：Docker 容器化运行
@@ -75,11 +85,11 @@ docker-compose up -d
 
 本服务端完全遵循开放的 [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) 规范，**通用兼容所有支持标准 MCP 协议的宿主环境与 AI Agent 客户端**（如 Claude Desktop、Cursor、Cline、Windsurf、Continue、Chatbox 等）。
 
-你可以在任意 MCP 客户端的配置文件中，根据使用偏好选择 **命令行参数传参** 或 **环境变量传参**。
+你可以在任意 MCP 客户端的配置文件中，根据环境管理习惯自由选择 **分立参数传参**、**完整连接串** 或 **环境变量注入**：
 
-### 范式 A：通过命令行参数传参 (Arguments)
+### 范式 A：通过命令行分立参数传参 (Arguments - 分立配置推荐)
 
-在客户端配置中直接通过 `args` 数组传入连接与安全选项：
+在客户端配置中通过 `args` 数组传入独立连接参数，方便审阅与运维：
 
 ```json
 {
@@ -88,10 +98,18 @@ docker-compose up -d
       "command": "uvx",
       "args": [
         "atengk-mcp-server-rabbitmq",
-        "--url",
-        "amqp://guest:guest@localhost:5672/",
-        "--management-url",
-        "http://guest:guest@localhost:15672",
+        "--broker-host",
+        "rabbitmq.internal",
+        "--broker-port",
+        "5672",
+        "-u",
+        "app_admin",
+        "-P",
+        "secure_password",
+        "--vhost",
+        "/",
+        "--management-port",
+        "15672",
         "--allow-write"
       ]
     }
@@ -99,11 +117,11 @@ docker-compose up -d
 }
 ```
 
-> 💡 *若系统已通过 `pip install` 全局安装，可直接将 `"command": "uvx"` 及其下方的 `"atengk-mcp-server-rabbitmq"` 简写为 `"command": "atengk-mcp-server-rabbitmq"`。*
+> 💡 *若习惯传入单一完整协议串，亦可将连接参数替换为 `["--url", "amqp://user:pass@host:5672/", "--management-url", "http://user:pass@host:15672"]`。*
 
-### 范式 B：通过环境变量传参 (Environment Variables)
+### 范式 B：通过环境变量注入 (Environment Variables - 运维生产推荐)
 
-若客户端推荐通过 `env` 注入敏感连接凭据或便于统一管理，可采用环境变量方式：
+在 Docker Compose、Kubernetes Secret 或客户端 `env` 节点中以环境变量注入凭据，实现配置与命令完全解耦：
 
 ```json
 {
@@ -114,14 +132,20 @@ docker-compose up -d
         "atengk-mcp-server-rabbitmq"
       ],
       "env": {
-        "MCP_RABBITMQ_URL": "amqp://guest:guest@localhost:5672/",
-        "MCP_RABBITMQ_MANAGEMENT_URL": "http://guest:guest@localhost:15672",
+        "MCP_RABBITMQ_HOST": "rabbitmq.internal",
+        "MCP_RABBITMQ_PORT": "5672",
+        "MCP_RABBITMQ_USERNAME": "app_admin",
+        "MCP_RABBITMQ_PASSWORD": "secure_password",
+        "MCP_RABBITMQ_VHOST": "/",
+        "MCP_RABBITMQ_MANAGEMENT_PORT": "15672",
         "MCP_RABBITMQ_ALLOW_WRITE": "true"
       }
     }
   }
 }
 ```
+
+> 💡 *服务端同样支持标准单一 URL 环境变量：`MCP_RABBITMQ_URL` 与 `MCP_RABBITMQ_MANAGEMENT_URL`。*
 
 ### 范式 C：连接远程常驻 HTTP SSE 服务端 (Remote SSE)
 
@@ -187,20 +211,38 @@ docker-compose up -d
 
 ## ⚙️ 命令行参数与环境变量全景速查表
 
+### 1. RabbitMQ 目标连接与安全
+
 | CLI 参数 | 对应环境变量 | 默认值 | 参数说明 |
 | :--- | :--- | :--- | :--- |
-| `--url` | `MCP_RABBITMQ_URL` | `amqp://guest:guest@localhost:5672/` | RabbitMQ AMQP 0-9-1 连接协议串 |
-| `--management-url` | `MCP_RABBITMQ_MANAGEMENT_URL` | `None` | RabbitMQ Management HTTP API 访问地址 |
-| `-c, --config` | `MCP_RABBITMQ_CONFIG` | `None` | 多环境连接配置文件路径（`connections.yaml`） |
+| `--broker-host`, `--rmq-host` | `MCP_RABBITMQ_HOST` | `localhost` | RabbitMQ Broker 主机名或 IP 地址 |
+| `--broker-port`, `--rmq-port` | `MCP_RABBITMQ_PORT` | `5672` | RabbitMQ Broker AMQP 端口（开启 SSL 时默认 `5671`） |
+| `-u`, `--username`, `--user` | `MCP_RABBITMQ_USERNAME` / `MCP_RABBITMQ_USER` | `guest` | RabbitMQ 连接认证用户名 |
+| `-P`, `--password` | `MCP_RABBITMQ_PASSWORD` | `guest` | RabbitMQ 连接认证密码 |
+| `--vhost` | `MCP_RABBITMQ_VHOST` | `/` | 目标虚拟主机名称 |
+| `--ssl` / `--no-ssl` | `MCP_RABBITMQ_SSL` | `False` | 是否开启 AMQP SSL/TLS 加密通信 (`amqps://`) |
+| `--url` | `MCP_RABBITMQ_URL` | `None` (兜底本地默认) | 完整 AMQP 0-9-1 连接协议串（可被分立参数精准覆盖） |
+| `--management-host` | `MCP_RABBITMQ_MANAGEMENT_HOST` | 继承 Broker 主机 | Management HTTP API 服务主机名 |
+| `--management-port` | `MCP_RABBITMQ_MANAGEMENT_PORT` | `15672` | Management HTTP API 服务端口号 |
+| `--management-ssl` / `--no-management-ssl` | `MCP_RABBITMQ_MANAGEMENT_SSL` | `False` | 是否开启 Management HTTPS 通信协议 |
+| `--management-url` | `MCP_RABBITMQ_MANAGEMENT_URL` | `None` | 完整 Management HTTP API 根基地址 |
 | `--allow-write` | `MCP_RABBITMQ_ALLOW_WRITE` | `False` | 开启写保护门禁放行标志（允许声明、清空、发布消息） |
-| `-t, --transport` | `MCP_RABBITMQ_TRANSPORT` | `stdio` | MCP 传输层协议：`stdio` 或 `sse` |
-| `--host` | `MCP_RABBITMQ_SERVER_HOST` | `0.0.0.0` | 常驻 HTTP SSE 网关监听网络地址 |
-| `-p, --port` | `MCP_RABBITMQ_SERVER_PORT` | `8000` | 常驻 HTTP SSE 网关监听端口 |
+| `-c, --config` | `MCP_RABBITMQ_CONFIG_PATH` | `connections.yaml` | 多环境连接配置文件路径 |
+
+### 2. 双模通信网关自身配置
+
+| CLI 参数 | 对应环境变量 | 默认值 | 参数说明 |
+| :--- | :--- | :--- | :--- |
+| `-t, --transport` | `MCP_RABBITMQ_TRANSPORT` | `stdio` | MCP 传输层协议：`stdio`（标准管道）或 `sse`（常驻 HTTP） |
+| `--host` | `MCP_RABBITMQ_SERVER_HOST` | `0.0.0.0` | 常驻 HTTP SSE 网关自身绑定的监听网络地址 |
+| `-p, --port` | `MCP_RABBITMQ_SERVER_PORT` | `8000` | 常驻 HTTP SSE 网关自身绑定的监听端口 |
 | `-v, --verbose` | `MCP_RABBITMQ_LOG_LEVEL` | `False` (INFO) | 启用详细 DEBUG 日志输出 |
 | `--version` | - | - | 显示当前服务版本号并退出 |
 | `-h, --help` | - | - | 显示帮助信息与参数用法 |
 
-> 📌 **参数生效优先级**：**CLI 显式参数 > 系统环境变量 > `connections.yaml` 配置文件**。
+> 📌 **参数生效优先级与深度融合准则**：
+> 1. **优先级**：**CLI 显式参数 > 系统环境变量 > `connections.yaml` 配置文件**；
+> 2. **深度融合**：分立参数能够对基础 URL 进行**字段级覆盖**。例如同时传入 `--url "amqp://app:old@broker:5672/v1"` 与 `-P "new_secret"` 时，最终生效密码自动更新为 `new_secret`，其余主机与端口等元数据保持不变。
 
 ---
 

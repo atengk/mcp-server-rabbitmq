@@ -49,10 +49,47 @@ def build_parser() -> argparse.ArgumentParser:
         help="RabbitMQ AMQP 0-9-1 连接协议串（如: amqp://user:pass@localhost:5672/）",
     )
     conn_group.add_argument(
-        "--management-url",
-        dest="management_url",
+        "--broker-host",
+        "--rmq-host",
+        dest="broker_host",
         default=None,
-        help="RabbitMQ Management HTTP API 地址（如: http://user:pass@localhost:15672）",
+        help="RabbitMQ Broker 主机名或 IP 地址（默认: localhost）",
+    )
+    conn_group.add_argument(
+        "--broker-port",
+        "--rmq-port",
+        dest="broker_port",
+        type=int,
+        default=None,
+        help="RabbitMQ Broker AMQP 端口号（普通默认 5672，SSL 默认 5671）",
+    )
+    conn_group.add_argument(
+        "-u",
+        "--username",
+        "--user",
+        dest="username",
+        default=None,
+        help="RabbitMQ 认证用户名（默认: guest）",
+    )
+    conn_group.add_argument(
+        "-P",
+        "--password",
+        dest="password",
+        default=None,
+        help="RabbitMQ 认证密码（默认: guest）",
+    )
+    conn_group.add_argument(
+        "--vhost",
+        dest="vhost",
+        default=None,
+        help="RabbitMQ 虚拟主机名称（默认: /）",
+    )
+    conn_group.add_argument(
+        "--ssl",
+        action=argparse.BooleanOptionalAction,
+        dest="ssl",
+        default=None,
+        help="是否启用 AMQP SSL/TLS 加密传输 (amqps://)",
     )
     conn_group.add_argument(
         "-c",
@@ -60,6 +97,35 @@ def build_parser() -> argparse.ArgumentParser:
         dest="config",
         default=None,
         help="多环境实例连接配置文件路径（connections.yaml）",
+    )
+
+    # Management HTTP API 参数
+    mgmt_group = parser.add_argument_group("RabbitMQ Management HTTP API 配置")
+    mgmt_group.add_argument(
+        "--management-url",
+        dest="management_url",
+        default=None,
+        help="RabbitMQ Management HTTP API 地址（如: http://user:pass@localhost:15672）",
+    )
+    mgmt_group.add_argument(
+        "--management-host",
+        dest="management_host",
+        default=None,
+        help="Management HTTP 服务主机名（默认继承 Broker 主机）",
+    )
+    mgmt_group.add_argument(
+        "--management-port",
+        dest="management_port",
+        type=int,
+        default=None,
+        help="Management HTTP 服务端口号（默认: 15672）",
+    )
+    mgmt_group.add_argument(
+        "--management-ssl",
+        action=argparse.BooleanOptionalAction,
+        dest="management_ssl",
+        default=None,
+        help="是否启用 Management API HTTPS 协议 (https://)",
     )
 
     # 安全门禁控制
@@ -146,6 +212,15 @@ def main(argv: list[str] | None = None) -> None:
         url=args.url,
         management_url=args.management_url,
         allow_write=args.allow_write,
+        broker_host=args.broker_host,
+        broker_port=args.broker_port,
+        username=args.username,
+        password=args.password,
+        vhost=args.vhost,
+        ssl=args.ssl,
+        management_host=args.management_host,
+        management_port=args.management_port,
+        management_ssl=args.management_ssl,
     )
     if args.allow_write:
         logger.info("已通过 --allow-write 解除写操作保护，当前处于读写完全放行状态")

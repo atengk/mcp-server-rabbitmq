@@ -11,10 +11,14 @@ import pytest
 from mcp_server_rabbitmq.core.config import (
     RabbitMQConnectionConfig,
     RabbitMQServerConfig,
+    build_amqp_url,
+    build_management_url,
     get_global_config,
     load_config,
     mask_dict_credentials,
     mask_url,
+    merge_amqp_url,
+    merge_management_url,
     reset_global_config,
     set_global_config,
 )
@@ -207,3 +211,110 @@ class TestMaskDictCredentials:
         assert masked["nested"]["normal"] == "hello"
         assert "pass" not in masked["nested"]["inner_url"]
         assert "***" in masked["nested"]["inner_url"]
+
+
+class TestSplitParametersAndUrlMerging:
+    """测试分立环境变量与 URL 组装/融合覆盖逻辑."""
+
+    def test_build_amqp_url_default(self) -> None:
+        """测试默认参数组装 AMQP URL."""
+        url = build_amqp_url()
+        assert url == "amqp://guest:guest@localhost:5672/"
+
+    def test_build_amqp_url_ssl_and_custom(self) -> None:
+        """测试开启 SSL 与自定义端口、虚拟主机."""
+        url = build_amqp_url(
+            host="rabbitmq.prod.internal",
+            username="admin",
+            password="secret_password",
+            vhost="order_center",
+            ssl=True,
+        )
+        assert url == "amqps://admin:secret_password@rabbitmq.prod.internal:5671/order_center"
+
+    def test_build_amqp_url_special_characters_escaping(self) -> None:
+        """测试密码中包含特殊字符 (@, :, #, /) 时的 URL 转义与防注入."""
+        url = build_amqp_url(
+            host="192.168.1.100",
+            port=5672,
+            username="user@domain",
+            password="p@ss:w/rd#special",
+            vhost="/test_vhost",
+        )
+        assert "user%40domain" in url
+        assert "p%40ss%3Aw%2Frd%23special" in url
+        assert "/test_vhost" in url
+
+    def test_build_management_url_default(self) -> None:
+        """测试默认参数组装 Management URL."""
+        url = build_management_url()
+        assert url == "http://guest:guest@localhost:15672"
+
+    def test_build_management_url_ssl(self) -> None:
+        """测试开启 Management HTTPS 协议."""
+        url = build_management_url(
+            host="rmq-mgmt.example.com",
+            port=443,
+            username="sec_user",
+            password="sec_password",
+            ssl=True,
+            path="/api",
+        )
+        assert url == "https://sec_user:sec_password@rmq-mgmt.example.com:443/api"
+
+    def test_merge_amqp_url_overrides(self) -> None:
+        """测试分立参数部分覆盖已有基础 URL."""
+        base = "amqp://old_user:old_pass@old_host:5672/old_vhost"
+        merged = merge_amqp_url(
+            base_url=base,
+            password="new_secret_pass",
+            port=5673,
+            vhost="new_vhost",
+        )
+        assert merged == "amqp://old_user:new_secret_pass@old_host:5673/new_vhost"
+
+    def test_merge_management_url_overrides(self) -> None:
+        """测试分立参数部分覆盖已有 Management URL."""
+        base = "http://guest:guest@localhost:15672/api"
+        merged = merge_management_url(
+            base_url=base,
+            host="mgmt.internal",
+            ssl=True,
+        )
+        assert merged == "https://guest:guest@mgmt.internal:15672/api"
+
+    def test_merge_management_url_none_when_empty(self) -> None:
+        """测试未指定任何 management 参数时保持 None."""
+        assert merge_management_url() is None
+
+    def test_load_config_from_split_environment_variables(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """测试仅配置分立环境变量时自动拼装合法连接元数据."""
+        monkeypatch.delenv("MCP_RABBITMQ_URL", raising=False)
+        monkeypatch.delenv("MCP_RABBITMQ_MANAGEMENT_URL", raising=False)
+        monkeypatch.setenv("MCP_RABBITMQ_HOST", "broker.internal")
+        monkeypatch.setenv("MCP_RABBITMQ_PORT", "5672")
+        monkeypatch.setenv("MCP_RABBITMQ_USERNAME", "deploy_user")
+        monkeypatch.setenv("MCP_RABBITMQ_PASSWORD", "deploy_pwd_123")
+        monkeypatch.setenv("MCP_RABBITMQ_VHOST", "sales_vhost")
+        monkeypatch.setenv("MCP_RABBITMQ_MANAGEMENT_PORT", "15672")
+
+        cfg = load_config()
+        conn = cfg.get_connection("default")
+        assert conn.amqp_url == "amqp://deploy_user:deploy_pwd_123@broker.internal:5672/sales_vhost"
+        assert conn.masked_amqp_url == "amqp://deploy_user:***@broker.internal:5672/sales_vhost"
+        assert conn.management_url == "http://deploy_user:deploy_pwd_123@broker.internal:15672"
+        assert conn.masked_management_url == "http://deploy_user:***@broker.internal:15672"
+
+    def test_split_env_overrides_base_url_env(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """测试分立环境变量优先覆盖 MCP_RABBITMQ_URL 中的同名凭据."""
+        monkeypatch.setenv("MCP_RABBITMQ_URL", "amqp://base_user:base_pass@base_host:5672/v1")
+        monkeypatch.setenv("MCP_RABBITMQ_PASSWORD", "override_password_from_k8s_secret")
+
+        cfg = load_config()
+        conn = cfg.get_connection("default")
+        assert "base_user:override_password_from_k8s_secret@base_host" in conn.amqp_url
+

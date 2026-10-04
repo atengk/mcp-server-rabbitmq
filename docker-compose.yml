@@ -19,8 +19,16 @@ services:
       - "8000:8000"
     command: ["--transport", "sse", "--host", "0.0.0.0", "--port", "8000"]
     environment:
-      # RabbitMQ AMQP 连接 URL（连接宿主机外部 RabbitMQ 时使用 host.docker.internal）
+      # RabbitMQ AMQP 连接 URL（支持完整 URL 或分立参数）
       - MCP_RABBITMQ_URL=${MCP_RABBITMQ_URL:-amqp://guest:guest@host.docker.internal:5672/}
+
+      # 分立连接参数范式（若需以分立变量传参，解除下方注释即可）：
+      # - MCP_RABBITMQ_HOST=host.docker.internal
+      # - MCP_RABBITMQ_PORT=5672
+      # - MCP_RABBITMQ_USERNAME=guest
+      # - MCP_RABBITMQ_PASSWORD=guest
+      # - MCP_RABBITMQ_VHOST=/
+      # - MCP_RABBITMQ_MANAGEMENT_PORT=15672
 
       # RabbitMQ Management HTTP API 地址
       - MCP_RABBITMQ_MANAGEMENT_URL=${MCP_RABBITMQ_MANAGEMENT_URL:-http://host.docker.internal:15672}

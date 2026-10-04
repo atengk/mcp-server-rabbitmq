@@ -239,3 +239,63 @@ def test_dockerfile_contract_and_security() -> None:
     assert "EXPOSE 8000" in content
     assert 'ENTRYPOINT ["atengk-mcp-server-rabbitmq"]' in content
     assert '"--transport", "sse"' in content
+
+
+def test_cli_split_parameters_parsing() -> None:
+    """测试 CLI 命令行解析器对分立连接参数的正确识别."""
+    parser = build_parser()
+    args = parser.parse_args([
+        "--broker-host", "rmq.corp.internal",
+        "--broker-port", "5672",
+        "-u", "app_admin",
+        "-P", "P@ss:w0rd#",
+        "--vhost", "finance",
+        "--ssl",
+        "--management-port", "15672",
+        "--management-ssl",
+    ])
+    assert args.broker_host == "rmq.corp.internal"
+    assert args.broker_port == 5672
+    assert args.username == "app_admin"
+    assert args.password == "P@ss:w0rd#"
+    assert args.vhost == "finance"
+    assert args.ssl is True
+    assert args.management_port == 15672
+    assert args.management_ssl is True
+
+
+def test_cli_split_parameters_execution_override() -> None:
+    """测试通过 CLI 分立参数启动时自动融合组装合法连接配置."""
+    mock_server = MagicMock()
+    with patch("mcp_server_rabbitmq.cli.create_mcp_server", return_value=mock_server):
+        main([
+            "--broker-host", "10.0.1.20",
+            "--broker-port", "5673",
+            "-u", "custom_usr",
+            "-P", "custom_pwd",
+            "--vhost", "custom_vhost",
+            "--management-port", "15673",
+        ])
+
+        config = get_global_config()
+        conn = config.get_connection("default")
+        assert conn.amqp_url == "amqp://custom_usr:custom_pwd@10.0.1.20:5673/custom_vhost"
+        assert conn.masked_amqp_url == "amqp://custom_usr:***@10.0.1.20:5673/custom_vhost"
+        assert conn.management_url == "http://custom_usr:custom_pwd@10.0.1.20:15673"
+        assert conn.masked_management_url == "http://custom_usr:***@10.0.1.20:15673"
+
+
+def test_cli_split_overrides_url_arg() -> None:
+    """测试同时传入 --url 与分立参数时，分立参数深度覆盖对应字段."""
+    mock_server = MagicMock()
+    with patch("mcp_server_rabbitmq.cli.create_mcp_server", return_value=mock_server):
+        main([
+            "--url", "amqp://original_user:original_pass@cluster.internal:5672/v1",
+            "-P", "cli_injected_password",
+            "--broker-port", "5674",
+        ])
+
+        config = get_global_config()
+        conn = config.get_connection("default")
+        assert conn.amqp_url == "amqp://original_user:cli_injected_password@cluster.internal:5674/v1"
+
