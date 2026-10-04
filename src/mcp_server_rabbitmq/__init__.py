@@ -4,9 +4,12 @@
 @since 2026-10-04
 """
 
+from mcp_server_rabbitmq.cli import main
+from mcp_server_rabbitmq.server import create_mcp_server
+
 __version__ = "0.1.0"
 
-
-def main() -> None:
-    """CLI 启动占位入口."""
-
+__all__ = [
+    "create_mcp_server",
+    "main",
+]

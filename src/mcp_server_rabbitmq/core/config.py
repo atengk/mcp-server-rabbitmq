@@ -138,6 +138,47 @@ class RabbitMQServerConfig(BaseModel):
         """
         return [conn.to_summary_dict() for conn in self.connections.values()]
 
+    def apply_cli_overrides(
+        self,
+        url: str | None = None,
+        management_url: str | None = None,
+        allow_write: bool = False,
+    ) -> None:
+        """应用 CLI 命令行参数覆盖（保障 CLI > ENV > Config 优先级）.
+
+        @param url 命令行传入的 AMQP 连接协议串
+        @param management_url 命令行传入的 Management API 地址
+        @param allow_write 命令行传入的写操作放行标志
+        """
+        target_name = (
+            self.default_connection_name
+            if self.default_connection_name in self.connections
+            else "default"
+        )
+
+        if url:
+            if target_name in self.connections:
+                self.connections[target_name].amqp_url = url
+            else:
+                self.connections[target_name] = RabbitMQConnectionConfig(
+                    name=target_name,
+                    amqp_url=url,
+                )
+
+        if management_url:
+            if target_name in self.connections:
+                self.connections[target_name].management_url = management_url
+            else:
+                self.connections[target_name] = RabbitMQConnectionConfig(
+                    name=target_name,
+                    amqp_url="amqp://guest:guest@localhost:5672/",
+                    management_url=management_url,
+                )
+
+        if allow_write:
+            self.allow_write = True
+
+
 
 def _parse_bool(value: str | None, default: bool = False) -> bool:
     """解析布尔字符串环境变量."""
