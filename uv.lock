@@ -121,7 +121,7 @@ wheels = [
 
 [[package]]
 name = "atengk-mcp-server-rabbitmq"
-version = "1.0.3"
+version = "1.0.4"
 source = { editable = "." }
 dependencies = [
     { name = "aio-pika" },
