@@ -34,6 +34,9 @@ jobs:
       - name: 运行 ruff 静态语法检查
         run: uv run ruff check
 
+      - name: 运行 mypy 严格静态类型检查
+        run: uv run mypy src tests
+
       - name: 运行全量单元测试
         run: uv run pytest -s
 

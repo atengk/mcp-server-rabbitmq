@@ -1,0 +1,33 @@
+# ==============================================================================
+# RabbitMQ MCP 服务端多环境实例连接配置文件模板 (connections.example.yaml)
+# 使用方式: cp connections.example.yaml connections.yaml 并填入实际连接凭据
+# 启动命令: atengk-mcp-server-rabbitmq --config connections.yaml
+# ==============================================================================
+
+# 全局默认连接别名（当调用工具未显式传 connection 参数时回退至此实例）
+default_connection: "default"
+
+# 全局只读写保护门禁开关 (也可通过启动参数 --allow-write 强制覆写为 true)
+allow_write: false
+
+# 目标 RabbitMQ 实例连接字典
+connections:
+  # 默认本地开发环境实例
+  default:
+    name: "default"
+    # AMQP 0-9-1 连接协议串 (格式: amqp://<user>:<password>@<host>:<port>/<vhost>)
+    amqp_url: "amqp://guest:guest@localhost:5672/"
+    # RabbitMQ Management HTTP API 地址 (用于获取集群拓扑、全景概览与排障指标，可选)
+    management_url: "http://guest:guest@localhost:15672"
+
+  # 测试/预发环境实例示例
+  staging:
+    name: "staging"
+    amqp_url: "amqp://app_staging:StagingPass123!@rabbitmq-staging.internal:5672/order_vhost"
+    management_url: "http://admin:AdminPass123!@rabbitmq-staging.internal:15672"
+
+  # 生产只读观察节点示例
+  production:
+    name: "production"
+    amqp_url: "amqps://ro_user:SecurePass2026@rabbitmq-cluster.prod.internal:5671/prod_vhost"
+    management_url: "https://ro_user:SecurePass2026@rabbitmq-cluster.prod.internal:15672"
