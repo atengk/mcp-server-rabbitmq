@@ -29,6 +29,45 @@
 
 为智能体提供直观可靠的 AMQP 拓扑声明（Exchange / Queue / Binding）、消息可靠发布、零损采样 (Peek)、受控消费拉取、外部微服务 TCP 连接诊断、活跃信道未确认消息积压排查及集群大盘监控全套能力。
 
+```mermaid
+graph TD
+    subgraph Clients ["AI Agent 宿主环境 (Generic Clients)"]
+        agent["Claude Desktop / Cursor / Cline / Windsurf / Chatbox"]
+    end
+
+    subgraph Server ["atengk-mcp-server-rabbitmq (FastMCP)"]
+        gateway{"双模传输网关<br/>(Dual-Transport)"}
+        stdio["Stdio 传输通道<br/>(管道直挂)"]
+        sse["HTTP SSE 传输通道<br/>(常驻网络端口 :8000)"]
+        
+        gate{"安全只读门禁<br/>(--allow-write)"}
+        mask["全域凭据脱敏引擎<br/>(Credential Masking)"]
+
+        subgraph Core ["双核通信引擎"]
+            amqp["异步 AMQP 驱动 (aio-pika)<br/>• 消息发布 / 采样 (Peek) / 消费<br/>• 交换机 / 队列 / 绑定拓扑声明"]
+            mgmt["异步 Management 客户端 (httpx)<br/>• 集群概览与指标大盘<br/>• 客户端物理连接与活跃信道排障"]
+        end
+    end
+
+    subgraph Cluster ["RabbitMQ 服务端"]
+        amqp_port["AMQP 端口 :5672 (数据平面)"]
+        mgmt_port["Management API 端口 :15672 (控制平面)"]
+    end
+
+    agent -->|JSON-RPC 协议| gateway
+    gateway --> stdio
+    gateway --> sse
+    stdio --> gate
+    sse --> gate
+    gate --> amqp
+    gate --> mgmt
+    amqp --> amqp_port
+    mgmt --> mgmt_port
+    amqp -.-> mask
+    mgmt -.-> mask
+    mask -.-> agent
+```
+
 ---
 
 ## ⚡ 快速开始 (Quick Start)
@@ -267,6 +306,25 @@ docker-compose up -d
 - **高危指令二次确认机制**：清空与删除操作要求必须传入 `confirm=True`，未传时仅返回受影响资源预估报告，绝不发生物理执行；
 - **零损采样 (Zero-Loss Peek)**：队列采样读取后在退出阶段统一延迟批量 `reject(requeue=True)`，保证队列消息数量与顺序完全零破坏；
 - **全域凭据脱敏算法**：任何连接串、字典属性或错误堆栈中的密码与认证 Token 统一替换为 `***`，彻底阻断大模型会话凭证泄露。
+
+---
+
+## ❓ 常见问题 (FAQ)
+
+### Q1: 为什么同时需要 Broker 连接与 Management API 连接？两者都必须配置吗？
+**答：两者采用完全不同的协议，职责清晰解耦，且 Management API 是可选的：**
+- **Broker 连接 (AMQP 5672)**：负责**数据平面 (Data Plane)** 操作（消息发布、无损采样、队列声明与绑定）。AMQP 是纯二进制高性能流协议，规范中**没有定义全局宏观监控与统计接口**；
+- **Management API 连接 (HTTP 15672)**：负责**管控平面 (Control Plane)** 操作（集群概览、微服务物理连接监控、信道堆积诊断），由 RabbitMQ Management 插件提供；
+- **非强制与优雅降级**：若未配置 Management API，全套 AMQP 消息与拓扑功能**完全不受影响**；调用排障诊断工具时会自动返回清晰的降级提示，绝不异常崩溃。此外，使用分立参数 `--management-port 15672` 时，主机与认证信息会自动继承 Broker 配置。
+
+### Q2: 在只读模式下能否安全排查生产队列积压？采样消息会被误删吗？
+**答：绝对安全，消息零丢失。**
+- `rabbitmq_peek_messages`（采样）采用零损窥探机制：拉取消息后在退出阶段统一延迟批量执行 `reject(requeue=True)`，队列消息数量与顺序完全不受影响；
+- `rabbitmq_get_messages` 默认 `ack=False`，仅供检视；只有传 `ack=True` 时才会物理出队，且在只读模式下会被写保护门禁直接拦截。
+
+### Q3: 生产容器化或 Kubernetes 中如何优雅管理凭据？
+**答：推荐使用环境变量分立注入范式。**
+你可以将数据库或 K8s Secret 中的独立字段分别映射为 `MCP_RABBITMQ_HOST`、`MCP_RABBITMQ_PORT`、`MCP_RABBITMQ_USERNAME`、`MCP_RABBITMQ_PASSWORD`、`MCP_RABBITMQ_MANAGEMENT_PORT` 等，无需繁琐拼装连接字符串，且避免特殊字符转义破坏。
 
 ---
 

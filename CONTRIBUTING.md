@@ -24,7 +24,39 @@
 
 ---
 
-## 2. Commit 提交信息规范
+## 2. 本地开发与质量检验 (Local Development)
+
+本项目采用现代包管理器 [uv](https://docs.astral.sh/uv/) 进行依赖管理与执行调度，运行环境要求 Python 3.12+。
+
+### 1. 环境初始化
+克隆代码后，在项目根目录同步安装开发依赖与虚拟环境：
+```bash
+uv sync
+```
+
+### 2. 运行自动化测试集
+运行包含拓扑、消息收发、安全门禁、分立参数及双模网关的全部 103+ 项单元与集成测试：
+```bash
+uv run pytest
+```
+
+### 3. 代码风格与规范检查 (Lint & Format)
+使用 Ruff 进行极速代码规范校验：
+```bash
+uv run ruff check .
+```
+
+### 4. 严格静态类型检查 (Mypy)
+确保源码与测试文件 100% 通过强类型检查：
+```bash
+uv run mypy src tests
+```
+
+> 💡 *发起 Pull Request 前，请确保 `pytest`、`ruff` 与 `mypy` 全部处于 0 错误绿灯状态，以保障 CI 流水线顺畅通过。*
+
+---
+
+## 3. Commit 提交信息规范
 
 本项目遵循 [Conventional Commits](https://www.conventionalcommits.org/zh-hans/) 规范，统一采用以下格式：
 
@@ -50,16 +82,16 @@
 
 ---
 
-## 3. Pull Request 流程
+## 4. Pull Request 流程
 
-- **PR 标题规范**：PR 标题必须同样遵循 [Conventional Commits](#2-commit-提交信息规范) 格式（如 `feat: 新增能力` 或 `fix: 修复缺陷`），CI 会对其进行自动化合规校验；
+- **PR 标题规范**：PR 标题必须同样遵循 [Conventional Commits](#3-commit-提交信息规范) 格式（如 `feat: 新增能力` 或 `fix: 修复缺陷`），CI 会对其进行自动化合规校验；
 - **模版填写**：发起 PR 时，请按模版完整填写变更背景、解决的问题以及关联的 Issue（如 `close #12`）；
 - **CI 绿灯**：确保 CI 流水线测试全部处于通过状态；
 - **审查与合并**：代码审查（Code Review）提出修改意见后，在原分支继续提交即可自动同步至 PR；合并后特性分支将被删除。
 
 ---
 
-## 4. 版本发版机制与发布说明
+## 5. 版本发版机制与发布说明
 
 本项目通过 GitHub Actions 实现了自动化发版体系。正式发版标准流程如下：
 
