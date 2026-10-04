@@ -21,7 +21,8 @@ async def rabbitmq_list_client_connections(
 ) -> dict[str, Any]:
     """查询外部微服务客户端 TCP 连接列表、信道数与收发吞吐速率.
 
-    用于微服务连接池配置不当、连接泄漏或网络流量热点排查。
+    [注意区分] 本工具用于排查外部应用连入 RabbitMQ 的物理 TCP 链路与信道泄露；
+    若要查看 MCP 服务端自身配置的目标 Broker 实例清单，请调用 rabbitmq_list_connections 或 rabbitmq_list_configured_brokers。
     未配置 Management API 时依据 ADR-0001 优雅降级。
 
     @param connection 目标 Broker 连接配置别名，默认为 'default'

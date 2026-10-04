@@ -5,6 +5,7 @@
 """
 
 from mcp_server_rabbitmq.tools.broker import (
+    rabbitmq_list_configured_brokers,
     rabbitmq_list_connections,
     rabbitmq_overview,
     rabbitmq_ping,
@@ -43,6 +44,7 @@ __all__ = [
     "rabbitmq_list_bindings",
     "rabbitmq_list_channels",
     "rabbitmq_list_client_connections",
+    "rabbitmq_list_configured_brokers",
     "rabbitmq_list_connections",
     "rabbitmq_list_exchanges",
     "rabbitmq_list_queues",

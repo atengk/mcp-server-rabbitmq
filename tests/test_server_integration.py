@@ -35,13 +35,14 @@ def clean_config_and_env() -> Iterator[None]:
 
 
 def test_create_mcp_server_registers_all_tools() -> None:
-    """测试 FastMCP 服务实例初始化时成功注册全量 19 个 MCP 工具 (涵盖拓扑、消息、探活与诊断)."""
+    """测试 FastMCP 服务实例初始化时成功注册全量 20 个 MCP 工具 (涵盖拓扑、消息、探活、诊断与别名)."""
     server = create_mcp_server()
     assert server is not None
     assert server.name == "atengk-mcp-server-rabbitmq"
 
     expected_tools = {
         "rabbitmq_list_connections",
+        "rabbitmq_list_configured_brokers",
         "rabbitmq_ping",
         "rabbitmq_overview",
         "rabbitmq_list_exchanges",
@@ -62,7 +63,7 @@ def test_create_mcp_server_registers_all_tools() -> None:
         "rabbitmq_list_channels",
     }
 
-    assert len(ALL_TOOLS) == 19
+    assert len(ALL_TOOLS) == 20
     tool_names = {getattr(fn, "__name__", str(fn)) for fn in ALL_TOOLS}
     assert tool_names == expected_tools
 

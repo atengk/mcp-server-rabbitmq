@@ -17,12 +17,25 @@ logger = logging.getLogger(__name__)
 
 
 def rabbitmq_list_connections() -> list[dict[str, Any]]:
-    """列出当前服务配置的所有 RabbitMQ 实例连接清单与脱敏地址.
+    """列出当前 MCP 服务配置的所有 RabbitMQ 实例连接清单与脱敏地址.
 
-    @return 脱敏后的连接配置信息列表
+    [注意区分] 本工具返回的是配置中心中管理的目标 Broker 实例（如 connections.yaml 中配置的连接别名），
+    若要排查微服务应用连入 RabbitMQ 的物理客户端 TCP 链路，请调用 rabbitmq_list_client_connections。
+
+    @return 脱敏后的 Broker 实例配置信息列表
     """
     config = get_global_config()
     return config.list_connections()
+
+
+def rabbitmq_list_configured_brokers() -> list[dict[str, Any]]:
+    """列出当前 MCP 服务配置的所有 RabbitMQ 目标 Broker 实例清单与脱敏地址.
+
+    为 rabbitmq_list_connections 的语义强化别名，用于清晰区分 Broker 实例配置与外部客户端 TCP 链路。
+
+    @return 脱敏后的 Broker 实例配置信息列表
+    """
+    return rabbitmq_list_connections()
 
 
 async def rabbitmq_ping(connection: str = "default") -> dict[str, Any]:

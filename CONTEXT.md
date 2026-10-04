@@ -35,3 +35,23 @@ _Avoid_: 回执, 提交, 完成
 **Write Gate (写入门禁)**:
 基于 CLI 启动参数 `--allow-write` 运行的全局只读屏障，用于阻断非受控的消息生产与拓扑修改。
 _Avoid_: 鉴权拦截器, 权限插件
+
+**Client Connection (客户端连接)**:
+外部微服务应用与 RabbitMQ Broker 之间建立的物理 TCP 网络连接链路，用于排查连接池泄漏、通道堆积与流量热点。
+_Avoid_: 实例配置, 目标服务, 配置文件连接
+
+**Configured Broker (配置实例连接)**:
+MCP 服务端在启动配置中声明的可用 RabbitMQ 目标集群节点配置项，用于切换探活与运维的目标上下文。
+_Avoid_: 客户端连接, 会话链路, 物理TCP
+
+**Prefetch Count (预取限额 / QoS)**:
+Broker 在消费者发送确认前允许推送到该 Channel 的最大未确认消息配额，用于消费者反压与流量控制。
+_Avoid_: 批量大小, 缓存阈值, 缓冲区大小
+
+**Unacknowledged Message (未确认消息 / unack)**:
+已被外部消费者取出但尚未完成业务处理回复 ACK 的在途消息计数，用于精准定位消费阻塞根因。
+_Avoid_: 积压消息, 待发消息, 挂起消息
+
+**Double Confirmation (高危二次确认)**:
+针对清空队列、删除队列与删除交换机等破坏性指令设置的强制确认参数守卫 (`confirm=True`)，默认未显式确认时仅返回受影响预估报告。
+_Avoid_: 二次输入, 强制删除, 交互式确认

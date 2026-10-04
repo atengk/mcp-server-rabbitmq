@@ -15,6 +15,7 @@ from mcp_server_rabbitmq.core.config import (
     set_global_config,
 )
 from mcp_server_rabbitmq.tools.broker import (
+    rabbitmq_list_configured_brokers,
     rabbitmq_list_connections,
     rabbitmq_overview,
     rabbitmq_ping,
@@ -54,6 +55,9 @@ def test_rabbitmq_list_connections() -> None:
         assert "secret" not in c["amqp_url"]
         assert "admin123" not in c["amqp_url"]
         assert "***" in c["amqp_url"]
+
+    # 验证语义别名工具完全一致
+    assert rabbitmq_list_configured_brokers() == conns
 
 
 @pytest.mark.asyncio

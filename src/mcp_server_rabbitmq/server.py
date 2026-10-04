@@ -21,6 +21,7 @@ from mcp_server_rabbitmq.tools import (
     rabbitmq_list_bindings,
     rabbitmq_list_channels,
     rabbitmq_list_client_connections,
+    rabbitmq_list_configured_brokers,
     rabbitmq_list_connections,
     rabbitmq_list_exchanges,
     rabbitmq_list_queues,
@@ -40,6 +41,7 @@ FastMCP = MCPServer
 # 全量注册挂载的 MCP 运维与消息工具集
 ALL_TOOLS: list[Callable[..., Any]] = [
     rabbitmq_list_connections,
+    rabbitmq_list_configured_brokers,
     rabbitmq_ping,
     rabbitmq_overview,
     rabbitmq_list_exchanges,
