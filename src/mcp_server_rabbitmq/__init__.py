@@ -7,7 +7,7 @@
 from mcp_server_rabbitmq.cli import main
 from mcp_server_rabbitmq.server import create_mcp_server
 
-__version__ = "0.1.0"
+__version__ = "1.0.0"
 
 __all__ = [
     "create_mcp_server",

@@ -176,7 +176,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--version",
         action="version",
-        version="atengk-mcp-server-rabbitmq 0.1.0",
+        version="atengk-mcp-server-rabbitmq 1.0.0",
         help="显示当前服务版本号并退出",
     )
 
