@@ -125,6 +125,43 @@ class TestMessagePublishing:
             assert msg_arg.headers == headers
             assert msg_arg.expiration == 30.0
 
+    @pytest.mark.asyncio
+    async def test_publish_message_default_exchange(self) -> None:
+        """测试目标 exchange 为空字符串时正确使用 channel.default_exchange 发布."""
+        mock_default_exchange = AsyncMock()
+        mock_channel = AsyncMock()
+        mock_channel.default_exchange = mock_default_exchange
+        mock_conn = AsyncMock()
+        mock_conn.channel.return_value = mock_channel
+
+        with patch("aio_pika.connect_robust", return_value=mock_conn):
+            res = await rabbitmq_publish_message(
+                exchange="",
+                routing_key="direct_queue",
+                payload="msg to default exchange",
+            )
+            assert res["status"] == "ok"
+            mock_default_exchange.publish.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_publish_message_sub_second_ttl(self) -> None:
+        """测试小于 1000ms 的过期时间正确换算为秒（如 500ms -> 0.5s）."""
+        mock_exchange = AsyncMock()
+        mock_channel = AsyncMock()
+        mock_channel.get_exchange.return_value = mock_exchange
+        mock_conn = AsyncMock()
+        mock_conn.channel.return_value = mock_channel
+
+        with patch("aio_pika.connect_robust", return_value=mock_conn):
+            await rabbitmq_publish_message(
+                exchange="test_ex",
+                routing_key="rk",
+                payload="exp test",
+                expiration=500,
+            )
+            msg_arg: Message = mock_exchange.publish.call_args[0][0]
+            assert msg_arg.expiration == 0.5
+
 
 class TestMessagePeeking:
     """零损探查无损采样 (Peek) 单元测试."""
@@ -180,6 +217,47 @@ class TestMessagePeeking:
             assert res["status"] == "ok"
             assert res["count"] == 0
             assert res["messages"] == []
+
+    @pytest.mark.asyncio
+    async def test_peek_multiple_messages_sequential_order_and_delayed_requeue(self) -> None:
+        """测试多条消息按顺序被采样，且在循环结束后全部被批量 requeue 回队首."""
+        def make_msg(content: str) -> AsyncMock:
+            m = AsyncMock()
+            m.body = content.encode("utf-8")
+            m.content_type = "text/plain"
+            m.message_id = f"id-{content}"
+            m.delivery_mode = 2
+            m.priority = 0
+            m.headers = {}
+            m.routing_key = "rk"
+            m.exchange = ""
+            m.redelivered = False
+            return m
+
+        msg1 = make_msg("task-1")
+        msg2 = make_msg("task-2")
+        msg3 = make_msg("task-3")
+
+        mock_queue = AsyncMock()
+        mock_queue.get.side_effect = [msg1, msg2, msg3, None]
+        mock_channel = AsyncMock()
+        mock_channel.get_queue.return_value = mock_queue
+        mock_conn = AsyncMock()
+        mock_conn.channel.return_value = mock_channel
+
+        with patch("aio_pika.connect_robust", return_value=mock_conn):
+            res = await rabbitmq_peek_messages(queue="tasks_queue", count=3)
+
+            assert res["count"] == 3
+            assert [m["payload"] for m in res["messages"]] == ["task-1", "task-2", "task-3"]
+
+            # 验证所有消息均被安全归还
+            msg1.reject.assert_called_once_with(requeue=True)
+            msg2.reject.assert_called_once_with(requeue=True)
+            msg3.reject.assert_called_once_with(requeue=True)
+            msg1.ack.assert_not_called()
+            msg2.ack.assert_not_called()
+            msg3.ack.assert_not_called()
 
 
 class TestMessageConsumption:

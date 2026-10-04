@@ -6,13 +6,17 @@
 
 import base64
 import json
+import logging
 from typing import Any
 
+import aio_pika.exceptions
 from aio_pika import DeliveryMode, Message
 
 from mcp_server_rabbitmq.core.amqp_client import get_amqp_channel
 from mcp_server_rabbitmq.core.config import get_global_config
 from mcp_server_rabbitmq.core.security import check_write_permission, require_write
+
+logger = logging.getLogger(__name__)
 
 
 def _encode_payload(payload: Any) -> tuple[bytes, str]:
@@ -112,12 +116,11 @@ async def rabbitmq_publish_message(
 
     body_bytes, content_type = _encode_payload(payload)
 
-    # 处理 TTL 过期参数（毫秒转秒格式化）
+    # 处理 TTL 过期参数（毫秒数字或字符串统一换算为秒）
     exp_val: float | None = None
     if expiration is not None:
         try:
-            numeric_exp = float(expiration)
-            exp_val = numeric_exp / 1000.0 if numeric_exp >= 1000 else numeric_exp
+            exp_val = float(expiration) / 1000.0
         except (ValueError, TypeError):
             exp_val = None
 
@@ -132,7 +135,7 @@ async def rabbitmq_publish_message(
     )
 
     async with get_amqp_channel(conn_cfg.amqp_url) as ch:
-        ex = await ch.get_exchange(exchange)
+        ex = await ch.get_exchange(exchange) if exchange else ch.default_exchange
         await ex.publish(msg, routing_key=routing_key)
 
     return {
@@ -154,7 +157,7 @@ async def rabbitmq_peek_messages(
 ) -> dict[str, Any]:
     """对队列头部消息实施无损诊断采样 (Peek).
 
-    读取消息后立即触发 reject(requeue=True)，确保数据零丢失且不出队 (ADR-0002)。
+    读取消息后延迟在循环结束后统一触发 reject(requeue=True)，确保数据零丢失且不出队，同时防止重复读取同一条消息 (ADR-0002)。
 
     @param queue 目标队列名称
     @param count 采样数量限制（1-50，默认 10）
@@ -166,20 +169,25 @@ async def rabbitmq_peek_messages(
     conn_cfg = config.get_connection(connection)
 
     results: list[dict[str, Any]] = []
+    fetched_messages: list[Any] = []
 
-    async with get_amqp_channel(conn_cfg.amqp_url) as ch:
-        q = await ch.get_queue(queue)
-        for _ in range(safe_count):
-            msg = await q.get(no_ack=False, fail=False)
-            if msg is None:
-                break
-
-            try:
+    try:
+        async with get_amqp_channel(conn_cfg.amqp_url) as ch:
+            q = await ch.get_queue(queue)
+            for _ in range(safe_count):
+                msg = await q.get(no_ack=False, fail=False)
+                if msg is None:
+                    break
+                fetched_messages.append(msg)
                 record = _format_message_record(msg)
                 results.append(record)
-            finally:
-                # 核心安全契约：采样必定无损 requeue，绝不确认出队
+    finally:
+        # 核心安全契约：采样完成后统一将所有抓取的消息归还队首，避免迭代期间重复读取同一条消息
+        for msg in fetched_messages:
+            try:
                 await msg.reject(requeue=True)
+            except (aio_pika.exceptions.AMQPError, OSError, TimeoutError) as err:
+                logger.debug("批量归还采样消息时忽略连接关闭异常: %s", err)
 
     return {
         "status": "ok",
@@ -215,28 +223,31 @@ async def rabbitmq_get_messages(
     conn_cfg = config.get_connection(connection)
 
     results: list[dict[str, Any]] = []
+    unacked_messages: list[Any] = []
 
-    async with get_amqp_channel(conn_cfg.amqp_url) as ch:
-        q = await ch.get_queue(queue)
-        for _ in range(safe_count):
-            msg = await q.get(no_ack=False, fail=False)
-            if msg is None:
-                break
+    try:
+        async with get_amqp_channel(conn_cfg.amqp_url) as ch:
+            q = await ch.get_queue(queue)
+            for _ in range(safe_count):
+                msg = await q.get(no_ack=False, fail=False)
+                if msg is None:
+                    break
 
-            processed = False
-            try:
+                if not ack:
+                    unacked_messages.append(msg)
+
                 record = _format_message_record(msg)
                 results.append(record)
 
                 if ack:
                     await msg.ack()
-                    processed = True
-                else:
+    finally:
+        if not ack:
+            for msg in unacked_messages:
+                try:
                     await msg.reject(requeue=True)
-                    processed = True
-            finally:
-                if not processed:
-                    await msg.reject(requeue=True)
+                except (aio_pika.exceptions.AMQPError, OSError, TimeoutError) as err:
+                    logger.debug("受控消费归还未确认消息时忽略连接关闭异常: %s", err)
 
     return {
         "status": "ok",
