@@ -62,7 +62,9 @@ jobs:
         run: uv python install 3.12
 
       - name: 构建标准分发产物 (Wheel & Sdist)
-        run: uv build
+        run: |
+          uv build
+          rm -f dist/.gitignore
 
       - name: 自动提取 Release Notes (基于 git-cliff 与 Conventional Commits)
         uses: orhun/git-cliff-action@v4
@@ -77,7 +79,7 @@ jobs:
         run: |
           echo -e "\n\n### 📦 分发产物校验和 (SHA-256 Checksums)" >> RELEASE_BODY.md
           echo '```text' >> RELEASE_BODY.md
-          sha256sum dist/* >> RELEASE_BODY.md
+          sha256sum dist/*.whl dist/*.tar.gz >> RELEASE_BODY.md
           echo '```' >> RELEASE_BODY.md
 
       - name: 创建 GitHub Release 并上传分发资产
@@ -85,7 +87,9 @@ jobs:
         with:
           name: "atengk-mcp-server-rabbitmq ${{ github.ref_name }}"
           body_path: RELEASE_BODY.md
-          files: dist/*
+          files: |
+            dist/*.whl
+            dist/*.tar.gz
           draft: false
           prerelease: false
 
@@ -138,6 +142,8 @@ jobs:
           context: .
           push: true
           platforms: linux/amd64,linux/arm64
+          provenance: false
+          sbom: false
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
