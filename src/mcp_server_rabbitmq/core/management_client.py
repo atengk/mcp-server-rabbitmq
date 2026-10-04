@@ -116,12 +116,13 @@ class ManagementClient:
         @param exchange 可选的指定交换机名称过滤
         @return 路由绑定规则字典列表
         """
-        if vhost and queue:
-            path = f"queues/{quote(vhost, safe='')}/{quote(queue, safe='')}/bindings"
-        elif vhost and exchange:
-            path = f"exchanges/{quote(vhost, safe='')}/{quote(exchange, safe='')}/bindings/source"
-        elif vhost:
-            path = f"bindings/{quote(vhost, safe='')}"
+        target_vhost = vhost or ("/" if (queue or exchange) else None)
+        if target_vhost and queue:
+            path = f"queues/{quote(target_vhost, safe='')}/{quote(queue, safe='')}/bindings"
+        elif target_vhost and exchange:
+            path = f"exchanges/{quote(target_vhost, safe='')}/{quote(exchange, safe='')}/bindings/source"
+        elif target_vhost:
+            path = f"bindings/{quote(target_vhost, safe='')}"
         else:
             path = "bindings"
 

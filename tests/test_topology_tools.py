@@ -122,6 +122,20 @@ class TestExchangeManagement:
             assert res["name"] == "my_topic_ex"
             mock_channel.exchange_delete.assert_called_once_with("my_topic_ex", if_unused=False)
 
+    @pytest.mark.asyncio
+    async def test_declare_exchange_invalid_type_raises_error(self) -> None:
+        """测试声明不支持的非法交换机类型抛出 ValueError."""
+        with pytest.raises(ValueError) as exc_info:
+            await rabbitmq_declare_exchange("bad_ex", type="invalid_type")
+        assert "不支持的交换机类型" in str(exc_info.value)
+
+    @pytest.mark.asyncio
+    async def test_delete_exchange_blocked_by_write_gate(self) -> None:
+        """测试即使传入 confirm=True，在只读模式下依然被写门禁拦截."""
+        set_global_config(RabbitMQServerConfig(allow_write=False))
+        with pytest.raises(WriteGateError):
+            await rabbitmq_delete_exchange("my_topic_ex", confirm=True)
+
 
 class TestQueueManagement:
     """队列查询、单队列详情、声明、清空与删除测试."""
@@ -242,6 +256,43 @@ class TestQueueManagement:
                 "order_queue", if_unused=False, if_empty=False
             )
 
+    @pytest.mark.asyncio
+    async def test_purge_queue_blocked_by_write_gate(self) -> None:
+        """测试即使传入 confirm=True，只读模式下 purge 依然被写门禁拦截."""
+        set_global_config(RabbitMQServerConfig(allow_write=False))
+        with pytest.raises(WriteGateError):
+            await rabbitmq_purge_queue("order_queue", confirm=True)
+
+    @pytest.mark.asyncio
+    async def test_delete_queue_blocked_by_write_gate(self) -> None:
+        """测试即使传入 confirm=True，只读模式下 delete 依然被写门禁拦截."""
+        set_global_config(RabbitMQServerConfig(allow_write=False))
+        with pytest.raises(WriteGateError):
+            await rabbitmq_delete_queue("order_queue", confirm=True)
+
+    @pytest.mark.asyncio
+    async def test_purge_and_delete_queue_frame_message_count_extraction(self) -> None:
+        """测试底层返回带有 .message_count 属性的帧对象时能安全提取为 int."""
+        class DummyFrame:
+            message_count = 42
+
+        mock_queue = AsyncMock()
+        mock_queue.purge.return_value = DummyFrame()
+        mock_channel = AsyncMock()
+        mock_channel.get_queue.return_value = mock_queue
+        mock_channel.queue_delete.return_value = DummyFrame()
+        mock_conn = AsyncMock()
+        mock_conn.channel.return_value = mock_channel
+
+        with patch("aio_pika.connect_robust", return_value=mock_conn):
+            purge_res = await rabbitmq_purge_queue("q1", confirm=True)
+            assert purge_res["purged_count"] == 42
+            assert isinstance(purge_res["purged_count"], int)
+
+            del_res = await rabbitmq_delete_queue("q1", confirm=True)
+            assert del_res["message_count"] == 42
+            assert isinstance(del_res["message_count"], int)
+
 
 class TestBindingManagement:
     """路由绑定查询、绑定与解绑测试."""
@@ -317,3 +368,16 @@ class TestBindingManagement:
             assert res["exchange"] == "order_events"
             assert res["routing_key"] == "order.created"
             mock_queue.unbind.assert_called_once_with("order_events", routing_key="order.created", arguments=None)
+
+    @pytest.mark.asyncio
+    async def test_list_bindings_filter_by_queue_default_vhost(self) -> None:
+        """测试仅传入 queue 参数时自动以默认虚拟主机 / 拼接过滤路径."""
+        mock_resp = httpx.Response(
+            status_code=200,
+            json=[],
+            request=httpx.Request("GET", "http://127.0.0.1:15672/api/queues/%2F/my_q/bindings"),
+        )
+        with patch.object(httpx.AsyncClient, "get", return_value=mock_resp) as mock_get:
+            res = await rabbitmq_list_bindings(connection="default", queue="my_q")
+            assert res["status"] == "ok"
+            mock_get.assert_called_once_with("http://guest:guest@127.0.0.1:15672/api/queues/%2F/my_q/bindings")

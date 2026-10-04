@@ -85,6 +85,10 @@ async def rabbitmq_declare_exchange(
     @param connection 目标连接别名，默认为 'default'
     @return 声明成功的交换机元数据
     """
+    valid_types = {"direct", "fanout", "topic", "headers"}
+    if type not in valid_types:
+        raise ValueError(f"不支持的交换机类型: '{type}'，仅支持: {sorted(valid_types)}")
+
     config = get_global_config()
     conn_cfg = config.get_connection(connection)
 
@@ -306,13 +310,15 @@ async def rabbitmq_purge_queue(
     async with get_amqp_channel(conn_cfg.amqp_url) as ch:
         q = await ch.get_queue(name)
         purged = await q.purge()
+        count = getattr(purged, "message_count", purged)
+        purged_count = int(count) if isinstance(count, (int, float)) else 0
 
     return {
         "status": "ok",
         "connection": connection,
         "name": name,
-        "purged_count": purged,
-        "message": f"成功清空队列 '{name}'，共清除 {purged} 条消息",
+        "purged_count": purged_count,
+        "message": f"成功清空队列 '{name}'，共清除 {purged_count} 条消息",
     }
 
 
@@ -348,7 +354,9 @@ async def rabbitmq_delete_queue(
     conn_cfg = config.get_connection(connection)
 
     async with get_amqp_channel(conn_cfg.amqp_url) as ch:
-        msg_count = await ch.queue_delete(name, if_unused=if_unused, if_empty=if_empty)
+        deleted = await ch.queue_delete(name, if_unused=if_unused, if_empty=if_empty)
+        count = getattr(deleted, "message_count", deleted)
+        msg_count = int(count) if isinstance(count, (int, float)) else 0
 
     return {
         "status": "ok",
