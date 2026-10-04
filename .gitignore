@@ -36,6 +36,7 @@ logs/
 !.env.example
 connections.yaml
 !connections.example.yaml
+scratch/
 
 # ==============================================================================
 # Node.js / 前端
