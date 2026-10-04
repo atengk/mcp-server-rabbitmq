@@ -44,6 +44,35 @@ def mask_url(url: str | None) -> str | None:
     return _PASSWORD_PATTERN.sub(r"\g<1>***\g<3>", url)
 
 
+_SENSITIVE_PROP_KEYS = ("password", "passwd", "secret", "token", "key", "credential", "auth")
+
+
+def mask_dict_credentials(data: dict[str, Any] | None) -> dict[str, Any]:
+    """对字典数据中的敏感凭据属性与包含密码的 URL 进行递归脱敏.
+
+    匹配包含 password, secret, token, key, credential 等关键字的键将其值替换为 '***'；
+    对包含 URL 的字符串值通过 mask_url 脱敏；对嵌套字典递归处理。
+
+    @param data 待脱敏的原始字典，支持 None
+    @return 脱敏后的安全字典副本
+    """
+    if not data:
+        return {}
+
+    masked: dict[str, Any] = {}
+    for key, value in data.items():
+        key_lower = str(key).lower()
+        if any(sensitive_word in key_lower for sensitive_word in _SENSITIVE_PROP_KEYS):
+            masked[key] = "***"
+        elif isinstance(value, str):
+            masked[key] = mask_url(value) if "://" in value else value
+        elif isinstance(value, dict):
+            masked[key] = mask_dict_credentials(value)
+        else:
+            masked[key] = value
+    return masked
+
+
 class RabbitMQConnectionConfig(BaseModel):
     """RabbitMQ 单个实例连接元数据配置."""
 

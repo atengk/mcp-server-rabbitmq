@@ -128,3 +128,47 @@ class ManagementClient:
 
         items: list[dict[str, Any]] = await self._get_json(path)
         return items
+
+    async def list_connections(self, vhost: str | None = None) -> list[dict[str, Any]]:
+        """查询外部客户端连接列表，支持指定 vhost 过滤.
+
+        @param vhost 可选的虚拟主机名称
+        @return 客户端连接信息字典列表
+        """
+        path = f"vhosts/{quote(vhost, safe='')}/connections" if vhost else "connections"
+        items: list[dict[str, Any]] = await self._get_json(path)
+        if vhost:
+            return [c for c in items if c.get("vhost") == vhost]
+        return items
+
+    async def list_channels(
+        self,
+        vhost: str | None = None,
+        connection: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """查询活跃信道列表，支持按 vhost 或特定客户端连接名称过滤.
+
+        @param vhost 可选的虚拟主机名称
+        @param connection 可选的客户端连接标识名称
+        @return 信道信息字典列表
+        """
+        if connection:
+            path = f"connections/{quote(connection, safe='')}/channels"
+            items: list[dict[str, Any]] = await self._get_json(path)
+            filtered = [
+                ch
+                for ch in items
+                if (ch.get("connection_details", {}).get("name") or ch.get("connection")) == connection
+            ]
+            if vhost:
+                filtered = [ch for ch in filtered if ch.get("vhost") == vhost]
+            return filtered
+        elif vhost:
+            path = f"vhosts/{quote(vhost, safe='')}/channels"
+            items = await self._get_json(path)
+            return [ch for ch in items if ch.get("vhost") == vhost]
+        else:
+            path = "channels"
+            items = await self._get_json(path)
+            return items
+

@@ -9,6 +9,10 @@ from mcp_server_rabbitmq.tools.broker import (
     rabbitmq_overview,
     rabbitmq_ping,
 )
+from mcp_server_rabbitmq.tools.diagnostics import (
+    rabbitmq_list_channels,
+    rabbitmq_list_client_connections,
+)
 from mcp_server_rabbitmq.tools.messages import (
     rabbitmq_get_messages,
     rabbitmq_peek_messages,
@@ -37,6 +41,8 @@ __all__ = [
     "rabbitmq_get_messages",
     "rabbitmq_get_queue",
     "rabbitmq_list_bindings",
+    "rabbitmq_list_channels",
+    "rabbitmq_list_client_connections",
     "rabbitmq_list_connections",
     "rabbitmq_list_exchanges",
     "rabbitmq_list_queues",

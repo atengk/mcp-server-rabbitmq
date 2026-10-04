@@ -13,6 +13,7 @@ from mcp_server_rabbitmq.core.config import (
     RabbitMQServerConfig,
     get_global_config,
     load_config,
+    mask_dict_credentials,
     mask_url,
     reset_global_config,
     set_global_config,
@@ -161,3 +162,48 @@ connections:
 
         reset_global_config()
         assert get_global_config().allow_write is False
+
+
+class TestMaskDictCredentials:
+    """测试字典凭据与敏感字段递归脱敏 mask_dict_credentials."""
+
+    def test_mask_empty_or_none(self) -> None:
+        """测试空字典与 None 容错."""
+        assert mask_dict_credentials(None) == {}
+        assert mask_dict_credentials({}) == {}
+
+    def test_mask_sensitive_keys(self) -> None:
+        """测试敏感 key（password/secret/token/key）值掩码处理."""
+        data = {
+            "name": "my-client",
+            "password": "plain_password",
+            "api_token": "token123",
+            "secret_key": "topsecret",
+            "public_id": "pub123",
+        }
+        masked = mask_dict_credentials(data)
+        assert masked["name"] == "my-client"
+        assert masked["password"] == "***"
+        assert masked["api_token"] == "***"
+        assert masked["secret_key"] == "***"
+        assert masked["public_id"] == "pub123"
+
+    def test_mask_nested_and_url_values(self) -> None:
+        """测试嵌套字典与 URL 字符串自动脱敏."""
+        data = {
+            "product": "my-app",
+            "dsn": "amqp://user:secret@127.0.0.1:5672/",
+            "nested": {
+                "auth": "password123",
+                "normal": "hello",
+                "inner_url": "http://admin:pass@host:15672/api",
+            },
+        }
+        masked = mask_dict_credentials(data)
+        assert masked["product"] == "my-app"
+        assert "secret" not in masked["dsn"]
+        assert "***" in masked["dsn"]
+        assert masked["nested"]["auth"] == "***"
+        assert masked["nested"]["normal"] == "hello"
+        assert "pass" not in masked["nested"]["inner_url"]
+        assert "***" in masked["nested"]["inner_url"]
