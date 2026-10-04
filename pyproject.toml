@@ -1,6 +1,6 @@
 [project]
 name = "atengk-mcp-server-rabbitmq"
-version = "1.0.2"
+version = "1.0.3"
 description = "🐰 专为 LLM 打造的生产级 RabbitMQ Model Context Protocol (MCP) 服务端，支持 AMQP 拓扑声明、消息发布与消费、队列监控与管理能力"
 readme = "README.md"
 requires-python = ">=3.12"

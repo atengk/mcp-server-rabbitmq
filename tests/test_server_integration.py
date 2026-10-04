@@ -191,7 +191,7 @@ def test_cli_version(capsys: pytest.CaptureFixture[str]) -> None:
         parser.parse_args(["--version"])
     assert exc_info.value.code == 0
     captured = capsys.readouterr()
-    assert "1.0.2" in captured.out
+    assert "1.0.3" in captured.out
 
 
 @pytest.mark.asyncio

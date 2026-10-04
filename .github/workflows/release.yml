@@ -66,6 +66,10 @@ jobs:
           uv build
           rm -f dist/.gitignore
 
+      - name: 生成分发产物 SHA-256 校验和文件 (checksums.txt)
+        run: |
+          (cd dist && sha256sum *.whl *.tar.gz) > checksums.txt
+
       - name: 自动提取 Release Notes (基于 git-cliff 与 Conventional Commits)
         uses: orhun/git-cliff-action@v4
         id: git-cliff
@@ -75,11 +79,11 @@ jobs:
         env:
           OUTPUT: RELEASE_BODY.md
 
-      - name: 计算产物 SHA-256 校验和并追加至 Release 说明
+      - name: 追加产物 SHA-256 校验和至 Release 说明
         run: |
           echo -e "\n\n### 📦 分发产物校验和 (SHA-256 Checksums)" >> RELEASE_BODY.md
           echo '```text' >> RELEASE_BODY.md
-          sha256sum dist/*.whl dist/*.tar.gz >> RELEASE_BODY.md
+          cat checksums.txt >> RELEASE_BODY.md
           echo '```' >> RELEASE_BODY.md
 
       - name: 创建 GitHub Release 并上传分发资产
@@ -90,6 +94,7 @@ jobs:
           files: |
             dist/*.whl
             dist/*.tar.gz
+            checksums.txt
           draft: false
           prerelease: false
 
