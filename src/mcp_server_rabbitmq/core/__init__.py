@@ -4,6 +4,7 @@
 @since 2026-10-04
 """
 
+from mcp_server_rabbitmq.core.amqp_client import get_amqp_channel, get_amqp_connection
 from mcp_server_rabbitmq.core.config import (
     RabbitMQConnectionConfig,
     RabbitMQServerConfig,
@@ -13,6 +14,7 @@ from mcp_server_rabbitmq.core.config import (
     reset_global_config,
     set_global_config,
 )
+from mcp_server_rabbitmq.core.management_client import ManagementClient
 from mcp_server_rabbitmq.core.security import (
     WriteGateError,
     check_confirmation,
@@ -21,11 +23,14 @@ from mcp_server_rabbitmq.core.security import (
 )
 
 __all__ = [
+    "ManagementClient",
     "RabbitMQConnectionConfig",
     "RabbitMQServerConfig",
     "WriteGateError",
     "check_confirmation",
     "check_write_permission",
+    "get_amqp_channel",
+    "get_amqp_connection",
     "get_global_config",
     "load_config",
     "mask_url",
