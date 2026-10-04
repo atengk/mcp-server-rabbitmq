@@ -1,0 +1,141 @@
+name: 发布到 PyPI、GHCR 与 GitHub Release (Release Pipeline)
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  id-token: write
+  packages: write
+
+jobs:
+  # -------------------------------------------------------------
+  # Job 1: 质量门禁检查 (Test & Lint Guard)
+  # -------------------------------------------------------------
+  quality-check:
+    name: 运行代码规范与自动化测试门禁
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出源码
+        uses: actions/checkout@v4
+
+      - name: 安装 uv 依赖管理工具
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+          enable-cache: true
+
+      - name: 安装 Python 运行环境
+        run: uv python install 3.12
+
+      - name: 运行 ruff 静态语法检查
+        run: uv run ruff check
+
+      - name: 运行全量单元测试
+        run: uv run pytest -s
+
+  # -------------------------------------------------------------
+  # Job 2: 打包、生成 git-cliff 更新日志、创建 Release 与发布至 PyPI
+  # -------------------------------------------------------------
+  publish:
+    name: 构建打包与多渠道发布
+    needs: quality-check
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出源码 (完整历史记录供 git-cliff 分析)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 安装 uv 依赖管理工具
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+
+      - name: 安装 Python 运行环境
+        run: uv python install 3.12
+
+      - name: 构建标准分发产物 (Wheel & Sdist)
+        run: uv build
+
+      - name: 自动提取 Release Notes (基于 git-cliff 与 Conventional Commits)
+        uses: orhun/git-cliff-action@v4
+        id: git-cliff
+        with:
+          config: .cliff.toml
+          args: --latest --strip header
+        env:
+          OUTPUT: RELEASE_BODY.md
+
+      - name: 计算产物 SHA-256 校验和并追加至 Release 说明
+        run: |
+          echo -e "\n\n### 📦 分发产物校验和 (SHA-256 Checksums)" >> RELEASE_BODY.md
+          echo '```text' >> RELEASE_BODY.md
+          sha256sum dist/* >> RELEASE_BODY.md
+          echo '```' >> RELEASE_BODY.md
+
+      - name: 创建 GitHub Release 并上传分发资产
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "atengk-mcp-server-rabbitmq ${{ github.ref_name }}"
+          body_path: RELEASE_BODY.md
+          files: dist/*
+          draft: false
+          prerelease: false
+
+      - name: 自动发布到 PyPI (支持 Trusted Publishing 或 API Token)
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/
+          password: ${{ secrets.PYPI_API_TOKEN }}
+
+  # -------------------------------------------------------------
+  # Job 3: 构建多架构 Docker 镜像并推送至 GHCR (GitHub Container Registry)
+  # -------------------------------------------------------------
+  publish-docker:
+    name: 构建并推送 Docker 镜像至 GHCR
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 设置 QEMU 模拟器（支持多架构构建）
+        uses: docker/setup-qemu-action@v3
+
+      - name: 设置 Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: 登录 GitHub Container Registry (ghcr.io)
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 提取 Docker 镜像标签元数据
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest
+
+      - name: 构建并推送多架构镜像 (amd64 / arm64)
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          platforms: linux/amd64,linux/arm64
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
